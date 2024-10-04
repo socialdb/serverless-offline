@@ -813,7 +813,10 @@ export default class HttpServer {
           response.encoding = "binary"
           response.source = Buffer.from(result, "base64")
           response.variety = "buffer"
-        } else if (typeof result === "string") {
+        } else if (
+          typeof result === "string" &&
+          responseContentType !== "text/html"
+        ) {
           response.source = stringify(result)
         } else {
           response.source = result
@@ -826,7 +829,10 @@ export default class HttpServer {
           endpoint.payload === "2.0" &&
           (typeof result === "string" || !result.statusCode)
         ) {
-          const body = typeof result === "string" ? result : stringify(result)
+          const body =
+            typeof result === "string" && responseContentType !== "text/html"
+              ? result
+              : stringify(result)
           result = {
             body,
             headers: {
