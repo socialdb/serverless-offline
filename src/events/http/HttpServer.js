@@ -1,3 +1,4 @@
+import util from "node:util";
 import { Buffer } from "node:buffer"
 import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
@@ -430,6 +431,10 @@ export default class HttpServer {
       stage,
     } = params
 
+    console.error("**************************************************")
+    this.#truncateLogging(params)
+    console.error("**************************************************")
+
     return async (request, h) => {
       const requestPath =
         endpoint.isHttpApi || this.#options.noPrependStageInUrl
@@ -611,11 +616,20 @@ export default class HttpServer {
 
       let result
       let err
+      let resultStatus = ''
 
       try {
         result = await lambdaFunction.runHandler()
       } catch (_err) {
         err = _err
+      }
+      // カスタム例外をraiseさせないように変更している
+      // see src/lambda/handler-runner/python-runner/invoke.py
+      try {
+        resultStatus = result.status
+        result = result.value
+      } catch (e) {
+        console.error(e)
       }
 
       // const processResponse = (err, data) => {
@@ -630,9 +644,37 @@ export default class HttpServer {
 
       // Failure handling
       let errorStatusCode = "502"
+      let errorList = ''
+      let errorMessage = ''
 
-      if (err) {
-        const errorMessage = (err.message || err).toString()
+      if (resultStatus === 'fail') {
+        if (endpoint.response && endpoint.response.statusCodes) {
+          const { statusCodes } = endpoint.response
+          Object.keys(statusCodes).some((key) => {
+            const { pattern } = statusCodes[key]
+            const regex = new RegExp(`^${pattern}$`)
+            if (regex.test(result)) {
+              console.log('key', key)
+              console.log('pattern', pattern)
+              try {
+                console.log('result2', result)
+                errorList = JSON.parse(result)
+              } catch (e) {
+                errorList = { type: result }
+                console.error(e)
+              }
+              err = result
+              errorStatusCode = key
+              return true
+            }
+            return false
+          })
+        }
+      }
+      console.log('errorList', errorList)
+
+      if (err && errorStatusCode === '502') {
+        errorMessage = (err.message || err).toString()
 
         const found = errorMessage.match(/\[(\d{3})]/)
 
@@ -660,6 +702,19 @@ export default class HttpServer {
             break
           }
         }
+      } else if (err) {
+        errorMessage = err.toString()
+        // Mocks Lambda errors
+        result = {
+          errorMessage,
+          errorType: err.toString(),
+          stackTrace: err.toString(),
+        }
+        responseName = errorStatusCode
+        Object.keys(errorList).forEach((key) => {
+          console.log('key2', key)
+          result[key] = errorList[key]
+        })
       }
 
       log.debug(`Using response '${responseName}'`)
@@ -698,6 +753,10 @@ export default class HttpServer {
                 headerValue = valueArray[3]
                   ? jsonPath(result, valueArray.slice(3).join("."))
                   : result
+
+                if(valueArray.length == 5 && valueArray[3] == "errorMessage"){
+                  headerValue = valueArray[4] ? jsonPath(result, valueArray.slice(4).join('.')) : result;
+                }  
 
                 headerValue = headerValue == null ? "" : String(headerValue)
               } else {
@@ -1320,5 +1379,36 @@ export default class HttpServer {
   // TEMP FIXME quick fix to expose gateway server for testing, look for better solution
   getServer() {
     return this.#server
+  }
+
+  #truncateLogging(obj, max = 50) {
+    const seen = new WeakSet()
+    const walk = (value) => {
+      if (value && typeof value === "object") {
+        if (seen.has(value)) return value
+        seen.add(value)
+        if (Array.isArray(value)) {
+          return value.map(walk)
+        }
+        const out = {};
+        for (const [k, v] of Object.entries(value)) {
+          out[k] = walk(v)
+        }
+        return out
+      }
+      if (typeof value === "string") {
+        return value.length > max ? value.slice(0, max) + "…" : value
+      }
+      return value
+    }
+    const processed = walk(obj)
+    console.error(
+      util.inspect(processed, {
+        depth: null,
+        colors: true,
+        maxArrayLength: null,
+        breakLength: 120,
+      })
+    )
   }
 }

@@ -94,7 +94,16 @@ if __name__ == '__main__':
         input = json.loads(stdin.readline())
 
         context = FakeLambdaContext(**input.get('context', {}))
-        result = handler(input['event'], context)
+        try:
+            result = {
+                "status": "success",
+                "value": handler(input['event'], context),
+            }
+        except Exception as e:
+            result = {
+                "status": "fail",
+                "value": str(e),
+            }
 
         data = {
             # just an identifier to distinguish between
@@ -102,5 +111,6 @@ if __name__ == '__main__':
             '__offline_payload__': result
         }
 
+        print("[Python Debug]", json.dumps(result))
         sys.stdout.write(json.dumps(data))
         sys.stdout.write('\n')

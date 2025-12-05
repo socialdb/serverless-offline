@@ -72,6 +72,12 @@ export default class Endpoint {
       log.debug("Response Content-Type ", fep.responseContentType)
 
       // load response template from http response template, or load file if exists other use default
+      if (fep.response && fep.response.statusCodes) {
+        const { statusCodes } = fep.response
+        Object.keys(statusCodes).forEach((key) => {
+          fep.responses[key].responseTemplates[fep.responseContentType] = statusCodes[key].template
+        })
+      }
       if (fep.response && fep.response.template) {
         fep.responses.default.responseTemplates[fep.responseContentType] =
           fep.response.template
@@ -113,7 +119,11 @@ export default class Endpoint {
 
   // return fully generated Endpoint
   generate() {
-    const offlineEndpoint = new OfflineEndpoint()
+    let statusCodes = null
+    if (this.#http && this.#http.response && this.#http.response.statusCodes) {
+        statusCodes = this.#http.response.statusCodes
+    }
+    const offlineEndpoint = new OfflineEndpoint(statusCodes)
 
     const fullEndpoint = {
       ...offlineEndpoint,
