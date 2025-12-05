@@ -57,7 +57,5 @@ export default class OfflineEndpoint {
         statusCode: key,
       }
     })
-    // console.error("===== Custom offline endpoint =====")
-    // console.error(this.responses)
   }
 }

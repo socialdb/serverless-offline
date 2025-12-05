@@ -1,3 +1,4 @@
+import util from "node:util";
 import { Buffer } from "node:buffer"
 import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
@@ -431,7 +432,7 @@ export default class HttpServer {
     } = params
 
     console.error("**************************************************")
-    console.error(params)
+    this.#truncateLogging(params)
     console.error("**************************************************")
 
     return async (request, h) => {
@@ -1378,5 +1379,36 @@ export default class HttpServer {
   // TEMP FIXME quick fix to expose gateway server for testing, look for better solution
   getServer() {
     return this.#server
+  }
+
+  #truncateLogging(obj, max = 50) {
+    const seen = new WeakSet()
+    const walk = (value) => {
+      if (value && typeof value === "object") {
+        if (seen.has(value)) return value
+        seen.add(value)
+        if (Array.isArray(value)) {
+          return value.map(walk)
+        }
+        const out = {};
+        for (const [k, v] of Object.entries(value)) {
+          out[k] = walk(v)
+        }
+        return out
+      }
+      if (typeof value === "string") {
+        return value.length > max ? value.slice(0, max) + "…" : value
+      }
+      return value
+    }
+    const processed = walk(obj)
+    console.error(
+      util.inspect(processed, {
+        depth: null,
+        colors: true,
+        maxArrayLength: null,
+        breakLength: 120,
+      })
+    )
   }
 }
