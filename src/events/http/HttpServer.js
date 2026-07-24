@@ -696,7 +696,7 @@ export default class HttpServer {
         for (const [key, value] of entries(endpoint.responses)) {
           if (
             key !== "default" &&
-            `^${value.selectionPattern || key}$`.test(errorMessage)
+            new RegExp(`^${value.selectionPattern || key}$`).test(errorMessage)
           ) {
             responseName = key
             break
@@ -873,8 +873,10 @@ export default class HttpServer {
           response.source = Buffer.from(result, "base64")
           response.variety = "buffer"
         } else if (
+          // 動かしておかしくなったものを都度足してなんとかしているが、他が壊れないかを気にしないといけない
           typeof result === "string" &&
-          responseContentType !== "text/html"
+          responseContentType !== "text/html" &&
+          responseContentType !== "text/javascript"
         ) {
           response.source = stringify(result)
         } else {
